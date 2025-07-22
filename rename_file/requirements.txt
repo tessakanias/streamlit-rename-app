@@ -1,5 +1,5 @@
 streamlit
+easyocr==1.7.1
+torch==1.13.1
 Pillow
-easyocr
 numpy
-torch
