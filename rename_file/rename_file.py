@@ -38,7 +38,7 @@ def extract_kode_wilayah(image_path):
 # === Setup ===
 st.set_page_config(layout="wide")
 st.title("📝 Rename File Gambar")
-reader = easyocr.Reader(['id', 'en'])
+reader = easyocr.Reader(['id', 'en'], download_enabled=True)
 UPLOAD_FOLDER = 'uploaded_files'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
