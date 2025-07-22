@@ -1,5 +1,6 @@
 streamlit
-easyocr==1.7.1
-torch==1.13.1
+easyocr==1.4
+torch==1.10.0+cpu
 Pillow
 numpy
+-f https://download.pytorch.org/whl/torch_stable.html
