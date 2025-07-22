@@ -5,13 +5,34 @@ from datetime import datetime
 from PIL import Image, ImageEnhance, ImageFilter
 import easyocr
 import numpy as np
+import re
 
-# === OCR dengan preprocessing dan rotasi ===
+# === Setup halaman Streamlit ===
+st.set_page_config(layout="wide")
+st.title("📝 Rename File Gambar")
+
+# === Folder Upload (pastikan tersedia) ===
+UPLOAD_FOLDER = 'uploaded_files'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# === Cache untuk model OCR ===
+@st.cache_resource
+def get_reader():
+    with st.spinner("🔄 Memuat model OCR..."):
+        return easyocr.Reader(['id', 'en'])
+
+reader = get_reader()
+
+# === Fungsi ekstraksi kode wilayah dengan preprocessing dan rotasi ===
 def extract_kode_wilayah(image_path):
-    img = Image.open(image_path)
+    try:
+        img = Image.open(image_path)
+    except Exception as e:
+        st.error(f"❌ Gagal membuka gambar: {e}")
+        return None
 
     def preprocess(img):
-        img = img.convert('L')
+        img = img.convert('L')  # grayscale
         enhancer = ImageEnhance.Contrast(img)
         img = enhancer.enhance(2.0)
         img = img.filter(ImageFilter.SHARPEN)
@@ -24,7 +45,11 @@ def extract_kode_wilayah(image_path):
         rotated = img.rotate(angle, expand=True)
         processed = preprocess(rotated)
         np_img = np.array(processed)
-        result = reader.readtext(np_img, detail=0)
+        try:
+            result = reader.readtext(np_img, detail=0)
+        except Exception as e:
+            st.warning(f"Gagal membaca OCR pada rotasi {angle}: {e}")
+            continue
         for text in result:
             if any(c.isdigit() for c in text):
                 match = [t for t in result if len(t) == 14 and t.isdigit()]
@@ -35,23 +60,16 @@ def extract_kode_wilayah(image_path):
 
     return best_result if best_result else None
 
-# === Setup ===
-st.set_page_config(layout="wide")
-st.title("📝 Rename File Gambar")
-reader = easyocr.Reader(['id', 'en'])
-UPLOAD_FOLDER = 'uploaded_files'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-# === DB ===
+# === Database SQLite ===
 conn = sqlite3.connect('riwayat.db', check_same_thread=False)
 c = conn.cursor()
 c.execute('''
-CREATE TABLE IF NOT EXISTS riwayat (
-    username TEXT,
-    waktu TEXT,
-    nama_awal TEXT,
-    nama_akhir TEXT
-)
+    CREATE TABLE IF NOT EXISTS riwayat (
+        username TEXT,
+        waktu TEXT,
+        nama_awal TEXT,
+        nama_akhir TEXT
+    )
 ''')
 conn.commit()
 
@@ -63,12 +81,13 @@ def get_user_riwayat(username):
     c.execute("SELECT waktu, nama_awal, nama_akhir FROM riwayat WHERE username = ? ORDER BY waktu DESC", (username,))
     return c.fetchall()
 
-
-# Tidak perlu username, pakai default atau kosong
+# Username default (karena tidak login)
 username = "default_user"
 
+# === Tab Layout ===
 tab1, tab2, tab3 = st.tabs(["📤 Upload Gambar", "📁 Rename dari Folder", "📜 Riwayat Rename"])
 
+# === Tab 1: Upload Gambar ===
 with tab1:
     st.header("📤 Upload Gambar")
     uploaded_file = st.file_uploader("Unggah gambar", type=['jpg', 'jpeg', 'png'])
@@ -77,10 +96,22 @@ with tab1:
         with st.spinner("🔄 Sedang memproses gambar..."):
             filename = uploaded_file.name
             save_path = os.path.join(UPLOAD_FOLDER, filename)
-            with open(save_path, 'wb') as f:
-                f.write(uploaded_file.getbuffer())
 
-            kode = extract_kode_wilayah(save_path)
+            # Simpan file upload
+            try:
+                with open(save_path, 'wb') as f:
+                    f.write(uploaded_file.getbuffer())
+            except Exception as e:
+                st.error(f"Gagal menyimpan file: {e}")
+                st.stop()
+
+            # Ekstrak kode wilayah
+            try:
+                kode = extract_kode_wilayah(save_path)
+            except Exception as e:
+                st.error(f"❌ Error saat ekstraksi OCR: {e}")
+                kode = None
+
             if kode:
                 ext = os.path.splitext(filename)[-1]
                 base_name = f"Hasil_{kode}_beres"
@@ -93,7 +124,12 @@ with tab1:
                     new_path = os.path.join(UPLOAD_FOLDER, new_name)
                     counter += 1
 
-                os.rename(save_path, new_path)
+                try:
+                    os.rename(save_path, new_path)
+                except Exception as e:
+                    st.error(f"Gagal mengganti nama file: {e}")
+                    st.stop()
+
                 now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 insert_riwayat(username, now, filename, new_name)
                 st.success(f"✅ Berhasil rename gambar menjadi: {new_name}")
@@ -107,6 +143,7 @@ with tab1:
             else:
                 st.warning("⚠️ Gagal mengenali kode wilayah.")
 
+# === Tab 2: Rename dari Folder Path ===
 with tab2:
     st.header("📁 Rename Gambar dari Folder")
     folder_path = st.text_input("Masukkan path folder:")
@@ -128,9 +165,10 @@ with tab2:
                             insert_riwayat(username, now, file, new_name)
                             count += 1
                         except Exception as e:
-                            st.error(f"Gagal rename: {file}")
+                            st.error(f"Gagal rename: {file} → {e}")
                 st.success(f"✅ Selesai! {count} gambar berhasil di-rename.")
 
+# === Tab 3: Riwayat Rename ===
 with tab3:
     st.header("📜 Riwayat Rename")
     riwayat = get_user_riwayat(username)
