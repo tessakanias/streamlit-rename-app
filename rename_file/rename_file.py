@@ -15,13 +15,18 @@ st.title("📝 Rename File Gambar")
 UPLOAD_FOLDER = 'uploaded_files'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# === Cache untuk model OCR ===
+# === Cache dan spinner untuk model OCR ===
 @st.cache_resource
 def get_reader():
-    with st.spinner("🔄 Memuat model OCR..."):
-        return easyocr.Reader(['id', 'en'])
+    try:
+        with st.spinner("🔄 Memuat model OCR (EasyOCR)... Harap tunggu..."):
+            return easyocr.Reader(['id', 'en'])
+    except Exception as e:
+        st.error(f"❌ Gagal memuat model OCR: {e}")
+        st.stop()
 
 reader = get_reader()
+st.info("ℹ️ Model OCR sudah dimuat. Jika ini pertama kali, proses bisa memakan waktu beberapa menit.")
 
 # === Fungsi ekstraksi kode wilayah dengan preprocessing dan rotasi ===
 def extract_kode_wilayah(image_path):
