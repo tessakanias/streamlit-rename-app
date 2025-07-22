@@ -2,3 +2,4 @@ streamlit
 Pillow
 easyocr
 numpy
+torch
