@@ -5,6 +5,9 @@ from datetime import datetime
 from PIL import Image, ImageEnhance, ImageFilter
 import easyocr
 import numpy as np
+import zipfile
+import tempfile
+import shutil
 
 # === OCR dengan preprocessing dan rotasi ===
 def extract_kode_wilayah(image_path):
@@ -63,11 +66,9 @@ def get_user_riwayat(username):
     c.execute("SELECT waktu, nama_awal, nama_akhir FROM riwayat WHERE username = ? ORDER BY waktu DESC", (username,))
     return c.fetchall()
 
-
-# Tidak perlu username, pakai default atau kosong
 username = "default_user"
 
-tab1, tab2, tab3 = st.tabs(["📤 Upload Gambar", "📁 Rename dari Folder", "📜 Riwayat Rename"])
+tab1, tab2, tab3 = st.tabs(["📤 Upload Gambar", "📁 Rename dari Arsip ZIP", "📜 Riwayat Rename"])
 
 with tab1:
     st.header("📤 Upload Gambar")
@@ -108,28 +109,71 @@ with tab1:
                 st.warning("⚠️ Gagal mengenali kode wilayah.")
 
 with tab2:
-    st.header("📁 Rename Gambar dari Folder")
-    folder_path = st.text_input("Masukkan path folder:")
+    st.header("📁 Rename Gambar dari Arsip ZIP")
 
-    if folder_path and os.path.isdir(folder_path):
-        files = [f for f in os.listdir(folder_path) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
-        if st.button("Mulai Rename"):
-            with st.spinner("🔄 Sedang memproses folder..."):
-                count = 0
+    archive_file = st.file_uploader("Unggah file .zip", type=["zip"])
+
+    if archive_file:
+        with st.spinner("📂 Mengekstrak file..."):
+            # Simpan file arsip sementara
+            temp_dir = tempfile.mkdtemp()
+            archive_path = os.path.join(temp_dir, archive_file.name)
+            with open(archive_path, "wb") as f:
+                f.write(archive_file.read())
+
+            extract_dir = os.path.join(temp_dir, "extracted")
+            os.makedirs(extract_dir, exist_ok=True)
+
+            try:
+                with zipfile.ZipFile(archive_path, 'r') as zip_ref:
+                    zip_ref.extractall(extract_dir)
+            except Exception as e:
+                st.error(f"❌ Gagal mengekstrak ZIP: {e}")
+                shutil.rmtree(temp_dir)
+                st.stop()
+
+            renamed_dir = os.path.join(temp_dir, "renamed")
+            os.makedirs(renamed_dir, exist_ok=True)
+            count = 0
+
+            for root, _, files in os.walk(extract_dir):
                 for file in files:
-                    full_path = os.path.join(folder_path, file)
-                    kode = extract_kode_wilayah(full_path)
-                    if kode:
-                        new_name = f"Hasil_{kode}_beres{os.path.splitext(file)[-1]}"
-                        new_path = os.path.join(folder_path, new_name)
-                        try:
-                            os.rename(full_path, new_path)
+                    if file.lower().endswith(('.jpg', '.jpeg', '.png')):
+                        full_path = os.path.join(root, file)
+                        kode = extract_kode_wilayah(full_path)
+                        if kode:
+                            ext = os.path.splitext(file)[-1]
+                            new_name = f"Hasil_{kode}_beres{ext}"
+                            new_path = os.path.join(renamed_dir, new_name)
+
+                            counter = 1
+                            while os.path.exists(new_path):
+                                new_name = f"Hasil_{kode}_beres_{counter}{ext}"
+                                new_path = os.path.join(renamed_dir, new_name)
+                                counter += 1
+
+                            shutil.copy(full_path, new_path)
                             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                             insert_riwayat(username, now, file, new_name)
                             count += 1
-                        except Exception as e:
-                            st.error(f"Gagal rename: {file}")
-                st.success(f"✅ Selesai! {count} gambar berhasil di-rename.")
+
+            zip_output_path = os.path.join(temp_dir, "hasil_rename.zip")
+            with zipfile.ZipFile(zip_output_path, 'w') as zipf:
+                for file in os.listdir(renamed_dir):
+                    file_path = os.path.join(renamed_dir, file)
+                    zipf.write(file_path, arcname=file)
+
+            st.success(f"✅ Berhasil rename {count} gambar!")
+
+            with open(zip_output_path, "rb") as f:
+                st.download_button(
+                    label="⬇️ Download Hasil Rename (ZIP)",
+                    data=f.read(),
+                    file_name="hasil_rename.zip",
+                    mime="application/zip"
+                )
+
+            shutil.rmtree(temp_dir)
 
 with tab3:
     st.header("📜 Riwayat Rename")
