@@ -1,11 +1,11 @@
-streamlit>=1.28.0
-Pillow>=10.0.0
-numpy>=1.21.0
+streamlit
+Pillow
+numpy
 torch==2.7.1
 torchvision==0.15.2
 easyocr==1.7.1
-opencv-python-headless>=4.5.0
-pyunpack>=0.3.0
-patool>=1.12
+opencv-python-headless
+pyunpack
+patool
 python-magic>=0.4.27
 typing-extensions>=4.0.0  
