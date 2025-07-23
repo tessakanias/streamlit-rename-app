@@ -1,65 +1,152 @@
-import os
-import shutil
 import streamlit as st
+import os
+import sqlite3
+from datetime import datetime
+from PIL import Image, ImageEnhance, ImageFilter
 import easyocr
-from PIL import Image
-import re
+import numpy as np
 
-# Direktori penyimpanan
-UPLOAD_DIR = "uploaded"
-RENAMED_DIR = "renamed"
+# === OCR dengan preprocessing dan rotasi ===
+def extract_kode_wilayah(image_path):
+    img = Image.open(image_path)
 
-# Membuat folder jika belum ada
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(RENAMED_DIR, exist_ok=True)
+    def preprocess(img):
+        img = img.convert('L')
+        enhancer = ImageEnhance.Contrast(img)
+        img = enhancer.enhance(2.0)
+        img = img.filter(ImageFilter.SHARPEN)
+        return img
 
-# Inisialisasi EasyOCR
-reader = easyocr.Reader(['en'])
+    kode_pattern = r'\b\d{14}\b'
+    best_result = None
 
-st.title("🔍 Rename Gambar Otomatis Berdasarkan Kode OCR")
+    for angle in [0, 90, 180, 270]:
+        rotated = img.rotate(angle, expand=True)
+        processed = preprocess(rotated)
+        np_img = np.array(processed)
+        result = reader.readtext(np_img, detail=0)
+        for text in result:
+            if any(c.isdigit() for c in text):
+                match = [t for t in result if len(t) == 14 and t.isdigit()]
+                if match:
+                    return match[0]
+                elif not best_result:
+                    best_result = text
 
-uploaded_files = st.file_uploader("Unggah satu atau lebih gambar", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+    return best_result if best_result else None
 
-def extract_kode(texts):
-    # Gabungkan semua hasil OCR jadi satu string
-    gabungan = " ".join(texts)
-    # Cari semua angka 4 digit atau lebih
-    kode_list = re.findall(r'\b\d{3,}\b', gabungan)
-    # Gabungkan dengan underscore
-    return "_".join(kode_list) if kode_list else "TIDAK_TEMU_KODE"
+# === Setup ===
+st.set_page_config(layout="wide")
+st.title("📝 Rename File Gambar")
+reader = easyocr.Reader(['id', 'en'])
+UPLOAD_FOLDER = 'uploaded_files'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-if uploaded_files:
-    st.write("📂 Hasil Rename:")
+# === DB ===
+conn = sqlite3.connect('riwayat.db', check_same_thread=False)
+c = conn.cursor()
+c.execute('''
+CREATE TABLE IF NOT EXISTS riwayat (
+    username TEXT,
+    waktu TEXT,
+    nama_awal TEXT,
+    nama_akhir TEXT
+)
+''')
+conn.commit()
 
-    for uploaded_file in uploaded_files:
-        # Simpan ke folder upload
-        original_path = os.path.join(UPLOAD_DIR, uploaded_file.name)
-        with open(original_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
+def insert_riwayat(username, waktu, awal, akhir):
+    c.execute("INSERT INTO riwayat VALUES (?, ?, ?, ?)", (username, waktu, awal, akhir))
+    conn.commit()
 
-        try:
-            # OCR semua teks
-            result = reader.readtext(original_path)
-            all_texts = [r[1] for r in result]
+def get_user_riwayat(username):
+    c.execute("SELECT waktu, nama_awal, nama_akhir FROM riwayat WHERE username = ? ORDER BY waktu DESC", (username,))
+    return c.fetchall()
 
-            if all_texts:
-                # Ambil semua kode angka
-                extracted_kode = extract_kode(all_texts)
-                ext = os.path.splitext(uploaded_file.name)[1]
-                new_filename = f"Hasil_{extracted_kode}_beres{ext}"
-                new_path = os.path.join(RENAMED_DIR, new_filename)
-                shutil.copy(original_path, new_path)
 
-                st.success(f"✅ {uploaded_file.name} → {new_filename}")
+# Tidak perlu username, pakai default atau kosong
+username = "default_user"
+
+tab1, tab2, tab3 = st.tabs(["📤 Upload Gambar", "📁 Rename dari Folder", "📜 Riwayat Rename"])
+
+with tab1:
+    st.header("📤 Upload Gambar")
+    uploaded_file = st.file_uploader("Unggah gambar", type=['jpg', 'jpeg', 'png'])
+
+    if uploaded_file is not None:
+        with st.spinner("🔄 Sedang memproses gambar..."):
+            filename = uploaded_file.name
+            save_path = os.path.join(UPLOAD_FOLDER, filename)
+            with open(save_path, 'wb') as f:
+                f.write(uploaded_file.getbuffer())
+
+            kode = extract_kode_wilayah(save_path)
+            if kode:
+                ext = os.path.splitext(filename)[-1]
+                base_name = f"Hasil_{kode}_beres"
+                new_name = f"{base_name}{ext}"
+                new_path = os.path.join(UPLOAD_FOLDER, new_name)
+
+                counter = 1
+                while os.path.exists(new_path):
+                    new_name = f"{base_name}_{counter}{ext}"
+                    new_path = os.path.join(UPLOAD_FOLDER, new_name)
+                    counter += 1
+
+                os.rename(save_path, new_path)
+                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                insert_riwayat(username, now, filename, new_name)
+                st.success(f"✅ Berhasil rename gambar menjadi: {new_name}")
+                with open(new_path, "rb") as f:
+                    st.download_button(
+                        label="Download Hasil Rename",
+                        data=f.read(),
+                        file_name=new_name,
+                        mime="image/jpeg"
+                    )
             else:
-                st.warning(f"⚠️ Tidak ada teks terbaca di {uploaded_file.name}")
+                st.warning("⚠️ Gagal mengenali kode wilayah.")
 
-        except Exception as e:
-            st.error(f"❌ Gagal memproses {uploaded_file.name}: {e}")
+with tab2:
+    st.header("📁 Rename Gambar dari Folder")
+    folder_path = st.text_input("Masukkan path folder:")
 
-# Download hasil
-if os.listdir(RENAMED_DIR):
-    with st.expander("📥 Download semua file hasil rename"):
-        for filename in os.listdir(RENAMED_DIR):
-            with open(os.path.join(RENAMED_DIR, filename), "rb") as f:
-                st.download_button(f"Download {filename}", f, file_name=filename)
+    if folder_path and os.path.isdir(folder_path):
+        files = [f for f in os.listdir(folder_path) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+        if st.button("Mulai Rename"):
+            with st.spinner("🔄 Sedang memproses folder..."):
+                count = 0
+                for file in files:
+                    full_path = os.path.join(folder_path, file)
+                    kode = extract_kode_wilayah(full_path)
+                    if kode:
+                        new_name = f"Hasil_{kode}_beres{os.path.splitext(file)[-1]}"
+                        new_path = os.path.join(folder_path, new_name)
+                        try:
+                            os.rename(full_path, new_path)
+                            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            insert_riwayat(username, now, file, new_name)
+                            count += 1
+                        except Exception as e:
+                            st.error(f"Gagal rename: {file}")
+                st.success(f"✅ Selesai! {count} gambar berhasil di-rename.")
+
+with tab3:
+    st.header("📜 Riwayat Rename")
+    riwayat = get_user_riwayat(username)
+
+    for waktu, awal, akhir in riwayat:
+        path_file = os.path.join(UPLOAD_FOLDER, akhir)
+        col1, col2 = st.columns([6, 1])
+        with col1:
+            st.markdown(f"{waktu} | {awal} ➔ {akhir}")
+        with col2:
+            if os.path.exists(path_file):
+                with open(path_file, "rb") as f:
+                    st.download_button(
+                        label="⬇️",
+                        data=f.read(),
+                        file_name=akhir,
+                        mime="image/jpeg",
+                        key=path_file
+                    )
