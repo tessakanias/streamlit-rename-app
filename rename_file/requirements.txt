@@ -1,6 +1,8 @@
-streamlit==1.28.0
-Pillow==10.0.0
-numpy==1.24.0
+streamlit
+Pillow
+numpy
+torch==2.7.1
 easyocr==1.7.1
-opencv-python-headless==4.5.0.64
-python-magic==0.4.27
+opencv-python-headless
+pyunpack
+patool
