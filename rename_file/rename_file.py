@@ -115,9 +115,9 @@ with tab2:
 
     if archive_file:
         with st.spinner("📂 Mengekstrak file..."):
-            # Simpan file arsip sementara
             temp_dir = tempfile.mkdtemp()
             archive_path = os.path.join(temp_dir, archive_file.name)
+
             with open(archive_path, "wb") as f:
                 f.write(archive_file.read())
 
@@ -127,8 +127,9 @@ with tab2:
             try:
                 with zipfile.ZipFile(archive_path, 'r') as zip_ref:
                     zip_ref.extractall(extract_dir)
+                    st.success("✅ ZIP berhasil diekstrak.")
             except Exception as e:
-                st.error(f"❌ Gagal mengekstrak ZIP: {e}")
+                st.error(f"❌ Gagal ekstrak ZIP: {e}")
                 shutil.rmtree(temp_dir)
                 st.stop()
 
@@ -136,42 +137,61 @@ with tab2:
             os.makedirs(renamed_dir, exist_ok=True)
             count = 0
 
+            image_found = False
+
             for root, _, files in os.walk(extract_dir):
                 for file in files:
                     if file.lower().endswith(('.jpg', '.jpeg', '.png')):
+                        image_found = True
                         full_path = os.path.join(root, file)
-                        kode = extract_kode_wilayah(full_path)
-                        if kode:
-                            ext = os.path.splitext(file)[-1]
-                            new_name = f"Hasil_{kode}_beres{ext}"
-                            new_path = os.path.join(renamed_dir, new_name)
+                        st.write(f"🔍 Memproses file: {file}")
 
-                            counter = 1
-                            while os.path.exists(new_path):
-                                new_name = f"Hasil_{kode}_beres_{counter}{ext}"
+                        try:
+                            kode = extract_kode_wilayah(full_path)
+                            if kode:
+                                ext = os.path.splitext(file)[-1]
+                                new_name = f"Hasil_{kode}_beres{ext}"
                                 new_path = os.path.join(renamed_dir, new_name)
-                                counter += 1
 
-                            shutil.copy(full_path, new_path)
-                            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            insert_riwayat(username, now, file, new_name)
-                            count += 1
+                                counter = 1
+                                while os.path.exists(new_path):
+                                    new_name = f"Hasil_{kode}_beres_{counter}{ext}"
+                                    new_path = os.path.join(renamed_dir, new_name)
+                                    counter += 1
 
-            zip_output_path = os.path.join(temp_dir, "hasil_rename.zip")
-            with zipfile.ZipFile(zip_output_path, 'w') as zipf:
-                for file in os.listdir(renamed_dir):
-                    file_path = os.path.join(renamed_dir, file)
-                    zipf.write(file_path, arcname=file)
+                                shutil.copy(full_path, new_path)
+                                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                insert_riwayat(username, now, file, new_name)
+                                count += 1
+                            else:
+                                st.warning(f"⚠️ Kode wilayah tidak ditemukan di: {file}")
+                        except Exception as e:
+                            st.error(f"❌ Gagal proses {file}: {e}")
 
-            st.success(f"✅ Berhasil rename {count} gambar!")
+            if not image_found:
+                st.warning("⚠️ Tidak ditemukan file gambar (.jpg/.jpeg/.png) dalam ZIP.")
+                shutil.rmtree(temp_dir)
+                st.stop()
 
-            with open(zip_output_path, "rb") as f:
-                st.download_button(
-                    label="⬇️ Download Hasil Rename (ZIP)",
-                    data=f.read(),
-                    file_name="hasil_rename.zip",
-                    mime="application/zip"
-                )
+            # ZIP hasil rename
+            try:
+                zip_output_path = os.path.join(temp_dir, "hasil_rename.zip")
+                with zipfile.ZipFile(zip_output_path, 'w') as zipf:
+                    for file in os.listdir(renamed_dir):
+                        file_path = os.path.join(renamed_dir, file)
+                        zipf.write(file_path, arcname=file)
+
+                st.success(f"✅ Selesai! {count} gambar berhasil di-rename.")
+
+                with open(zip_output_path, "rb") as f:
+                    st.download_button(
+                        label="⬇️ Download Hasil Rename (ZIP)",
+                        data=f.read(),
+                        file_name="hasil_rename.zip",
+                        mime="application/zip"
+                    )
+            except Exception as e:
+                st.error(f"❌ Gagal membuat ZIP hasil: {e}")
 
             shutil.rmtree(temp_dir)
 
