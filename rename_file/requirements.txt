@@ -4,5 +4,3 @@ numpy
 torch==2.7.1
 easyocr==1.7.1
 opencv-python-headless
-pyunpack
-patool
