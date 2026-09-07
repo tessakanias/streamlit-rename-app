@@ -1,129 +1,237 @@
-# streamlit-rename-app
-# Otomatisasi Pengelolaan File Peta
+# Automatic Map Image Renaming
 
-Project ini dikembangkan sebagai bagian dari kegiatan Kerja Praktik di BPS Kabupaten Simalungun untuk mengotomatisasi proses pengelolaan file peta menggunakan *Python*. Sistem dirancang untuk membantu proses identifikasi dan penamaan ulang (*rename*) file peta berdasarkan kode tertentu yang diperoleh dari informasi pada file.
+Aplikasi berbasis Python dan Streamlit untuk mengotomatisasi proses penamaan ulang (*rename*) file gambar peta berdasarkan kode wilayah 14 digit yang terdeteksi dari gambar menggunakan Optical Character Recognition (OCR).
 
-## Deskripsi
+Project ini dikembangkan sebagai bagian dari kegiatan Kerja Praktik di BPS untuk membantu meningkatkan efisiensi pengelolaan file peta, khususnya ketika terdapat banyak file yang perlu diidentifikasi dan diberi nama secara konsisten.
 
-Pengelolaan file peta secara manual dapat membutuhkan waktu, terutama ketika jumlah file yang harus diproses cukup banyak. Oleh karena itu, dikembangkan sistem otomatisasi yang memanfaatkan Python dan QR Code detection untuk membantu mengidentifikasi file dan melakukan penamaan ulang secara otomatis.
+## Overview
 
-Project ini mencakup proses pendeteksian QR Code, pengambilan kode sebagai identitas file, hingga proses *rename* berdasarkan format penamaan yang telah ditentukan.
+Proses penamaan file peta secara manual dapat memerlukan waktu dan berisiko menimbulkan kesalahan. Aplikasi ini memanfaatkan EasyOCR untuk membaca teks pada gambar dan mencari pola kode wilayah berupa 14 digit angka.
 
-## 🎯 Tujuan
+##  Features
 
-* Mengotomatisasi proses penamaan ulang file peta.
-* Memanfaatkan QR Code sebagai identitas untuk membantu proses pengelolaan file.
-* Mengurangi proses manual dalam penamaan file.
-* Meningkatkan konsistensi penamaan file peta.
-* Menguji dan menyempurnakan sistem agar proses otomatisasi dapat berjalan sesuai kebutuhan.
+### 1. Rename Single Image
 
-## ⚙️ Fitur
+Pengguna dapat mengunggah satu file gambar peta dengan format:
 
-### 1. Automatic File Rename
+* `.jpg`
+* `.jpeg`
+* `.png`
 
-Melakukan penamaan ulang file peta secara otomatis berdasarkan kode tertentu.
+Aplikasi akan:
 
-### 2. QR Code Detection
+1. Membaca gambar.
+2. Melakukan preprocessing.
+3. Mendeteksi teks menggunakan EasyOCR.
+4. Mencari kode wilayah 14 digit.
+5. Membuat nama file baru berdasarkan kode.
+6. Menyediakan file hasil rename untuk diunduh.
 
-Mendeteksi QR Code yang terdapat pada file peta dan mengambil informasi kode yang tersimpan di dalamnya.
+###  2. Batch Rename from ZIP
 
-### 3. File Identification
+Aplikasi juga mendukung pemrosesan banyak gambar melalui **arsip ZIP**.
 
-Menggunakan kode hasil pembacaan QR Code sebagai informasi untuk mengidentifikasi file peta.
-
-### 4. Automated File Management
-
-Memproses file secara otomatis sehingga pengguna tidak perlu melakukan *rename* file satu per satu.
-
-### 5. Testing & Improvement
-
-Melakukan pengujian terhadap sistem dan melakukan penyempurnaan berdasarkan hasil pengujian untuk meningkatkan keandalan proses *rename* otomatis.
-
-## 🔄 Alur Proses
+Dengan alur:
 
 ```text
-File Peta
-    │
-    ▼
-Pembacaan File
-    │
-    ▼
-Deteksi QR Code
-    │
-    ▼
-Ekstraksi Kode
-    │
-    ▼
-Identifikasi File
-    │
-    ▼
-Penentuan Nama File
-    │
-    ▼
-Automatic Rename
-    │
-    ▼
-File Peta Terorganisir
+ZIP File
+   │
+   ▼
+Extract Images
+   │
+   ▼
+OCR Processing
+   │
+   ▼
+Detect 14-Digit Code
+   │
+   ▼
+Generate New Filename
+   │
+   ▼
+Create Output ZIP
 ```
 
-## 🛠️ Teknologi yang Digunakan
+Setiap gambar yang berhasil diidentifikasi akan disalin ke folder output dengan nama baru, kemudian seluruh hasil dikemas kembali menjadi file ZIP.
 
-* **Python** — bahasa pemrograman utama untuk membangun sistem otomasi.
-* **OpenCV** — digunakan dalam proses pengolahan gambar dan pendeteksian QR Code.
-* **Pillow (PIL)** — digunakan untuk membaca dan memproses file gambar.
+### 🔍 3. OCR-Based Code Detection
 
-## 📂 Struktur Project
+Sistem menggunakan EasyOCR untuk mendeteksi teks pada gambar.
+
+Untuk meningkatkan kemungkinan kode terbaca, gambar diproses menggunakan beberapa tahap:
+
+* Grayscale conversion
+* Contrast enhancement
+* Image sharpening
+* Rotation pada sudut `0°`, `90°`, `180°`, dan `270°`
+
+### 4. Duplicate Filename Handling
+
+Jika nama file hasil rename sudah digunakan, sistem secara otomatis menambahkan nomor urut.
+
+Contoh:
 
 ```text
-├── input/
-│   └── file_peta/
-├── output/
-│   └── file_peta_renamed/
+Hasil_12345678901234_beres.jpg
+Hasil_12345678901234_beres_1.jpg
+Hasil_12345678901234_beres_2.jpg
+```
+
+### 5. Rename History
+
+Setiap proses rename dicatat ke dalam database SQLite yang menyimpan:
+
+* Waktu proses
+* Nama file awal
+* Nama file hasil rename
+* Username
+
+Riwayat dapat dilihat melalui menu **Riwayat Rename** pada aplikasi.
+
+## Tech Stack
+
+| Technology       | Usage                                   |
+| ---------------- | --------------------------------------- |
+| *Python*         | Bahasa pemrograman utama                |
+| *Streamlit*      | Web interface                           |
+| *EasyOCR*        | Optical Character Recognition           |
+| *OpenCV / NumPy* | Pemrosesan dan manipulasi citra         |
+| *Pillow (PIL)*   | Image preprocessing                     |
+| *SQLite*         | Penyimpanan riwayat rename              |
+| *Zipfile*        | Pemrosesan arsip ZIP                    |
+| *Logging*        | Pencatatan error dan aktivitas aplikasi |
+
+##  Image Processing
+
+Sebelum dilakukan OCR, gambar diproses untuk membantu meningkatkan keterbacaan teks.
+
+```text
+Original Image
+      │
+      ▼
+Grayscale
+      │
+      ▼
+Contrast Enhancement
+      │
+      ▼
+Sharpening
+      │
+      ▼
+Rotation
+      │
+      ▼
+EasyOCR
+      │
+      ▼
+14-Digit Code Detection
+```
+
+Sistem mencoba empat orientasi gambar:
+
+```text
+0° → 90° → 180° → 270°
+```
+
+Pendekatan ini digunakan untuk menangani gambar peta yang memiliki orientasi teks berbeda.
+
+## Database
+
+Aplikasi menggunakan SQLite untuk menyimpan riwayat proses rename.
+
+Struktur tabel:
+
+```text
+riwayat
+├── username
+├── waktu
+├── nama_awal
+└── nama_akhir
+```
+
+Database memungkinkan pengguna melihat kembali file yang telah diproses melalui halaman Riwayat Rename.
+
+## Project Structure
+
+```text
+automatic-map-renaming/
+│
 ├── main.py
 ├── requirements.txt
-└── README.md
+├── README.md
+│
+├── uploaded_files/
+│
+├── riwayat.db
+└── app.log
 ```
 
-> Struktur folder dapat disesuaikan dengan implementasi project.
+> Struktur dapat disesuaikan dengan struktur repository yang digunakan.
 
-## 🚀 Cara Menjalankan
+##  Installation
 
-### 1. Clone Repository
+Clone repository:
 
 ```bash
 git clone <repository-url>
-cd <repository-folder>
+cd automatic-map-renaming
 ```
 
-### 2. Install Dependencies
+Install dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Jalankan Program
+Jalankan aplikasi:
 
 ```bash
-python main.py
+streamlit run main.py
 ```
 
-File peta yang akan diproses ditempatkan pada folder input. Sistem kemudian melakukan pendeteksian QR Code, mengambil kode identifikasi, dan menggunakan kode tersebut dalam proses penamaan ulang file.
+Aplikasi kemudian dapat diakses melalui browser.
 
-## 🧪 Pengujian
+## Requirements
 
-Pengujian dilakukan untuk memastikan:
+Contoh dependency yang digunakan:
 
-* QR Code dapat terdeteksi dengan baik.
-* Informasi kode dapat dibaca dengan benar.
-* Kode dapat digunakan untuk proses identifikasi file.
-* File dapat di-*rename* sesuai format yang ditentukan.
-* Proses *rename* dapat dilakukan pada beberapa file secara otomatis.
-* Sistem dapat menangani kondisi ketika QR Code tidak berhasil terbaca.
+```text
+streamlit
+easyocr
+Pillow
+numpy
+```
 
-## 📈 Hasil
+Library bawaan Python seperti `sqlite3`, `zipfile`, `tempfile`, `shutil`, `logging`, `os`, dan `re` tidak perlu di-install secara terpisah.
 
-Pengembangan sistem menghasilkan proses pengelolaan file peta yang lebih terotomatisasi. Dengan memanfaatkan QR Code sebagai informasi identifikasi, proses penamaan ulang file dapat dilakukan secara lebih **efisien dan konsisten** dibandingkan proses manual.
+## Testing & Improvement
 
-## 👩‍💻 Project Context
+Pengujian dilakukan untuk mengevaluasi kemampuan sistem dalam:
 
-Project ini dikembangkan sebagai salah satu kegiatan selama **Kerja Praktik di BPT**, dengan fokus pada penerapan **Python untuk otomasi pengelolaan file dan pemanfaatan computer vision dalam proses identifikasi QR Code**.
+* Membaca kode wilayah dari gambar.
+* Menangani gambar dengan orientasi berbeda.
+* Melakukan rename secara otomatis.
+* Memproses banyak gambar dalam satu file ZIP.
+* Menangani duplikasi nama file.
+* Mencatat hasil proses ke dalam database.
+* Menangani gambar yang tidak memiliki kode wilayah yang berhasil terbaca.
+
+Hasil pengujian digunakan sebagai dasar untuk melakukan penyempurnaan pada proses OCR dan mekanisme rename otomatis.
+
+## Project Objective
+
+Project ini bertujuan untuk:
+
+* Mengurangi proses penamaan file peta secara manual.
+* Meningkatkan efisiensi pengelolaan file.
+* Menjaga konsistensi format penamaan file.
+* Memanfaatkan OCR untuk mengidentifikasi informasi dari gambar.
+* Menyediakan proses batch untuk menangani banyak file sekaligus.
+
+## Project Context
+
+Project ini dikembangkan selama Kerja Praktik di BPS sebagai implementasi pemanfaatan Python, OCR, image processing, dan database untuk mendukung otomasi dalam pengelolaan file peta.
+
+---
+
+Python • Streamlit • EasyOCR • Image Processing • SQLite
